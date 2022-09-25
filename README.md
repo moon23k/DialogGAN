@@ -1,12 +1,19 @@
-# C2_Bot
+## C2_Bot
+$C^2 Bot$ referes to a **C**haracteristic **C**hat **Bot**
 
-## Intro
-"C^2 Bot" refers to "Characteristic Chatbot". 
-As the tile suggest, this repo covers a series of codes for implementing Characteristic ChatBot.
+<br>
 
+## Model desc
 
+<br>
+<br>
 
+## Configurations
+Dataset: HIMYM
 
-## Reference 
-ChatBot with Personality
-Distill BERT
+<br>
+<br>
+
+## Reference
+
+<br>
