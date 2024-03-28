@@ -1,10 +1,10 @@
 import json, argparse, torch
 from utils import set_trainer, load_dataset
 from transformers import (
-    set_seed, AutoTokenizer, 
-    AutoModelForSequenceClassification, 
+    set_seed, 
+    T5TokenizerFast, 
+    T5ForConditionalGeneration
 )
-
 
 
 
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     parser.add_argument('-strategy', required=True)
 
     args = parser.parse_args()
-    assert args.strategy.lower() in ['vanilla', 'fp16', 'grad_accumulation', 
-                                     'grad_checkpointing', 'adafactor', 'all']
+    assert args.strategy.lower() in ['std', 'eat', 'peft']
+
 
     main(args.strategy)
