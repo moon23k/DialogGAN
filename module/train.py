@@ -1,7 +1,6 @@
 import json, torch, evaluate
 import numpy as np
 from transformers import (
-    AutoModelForSequenceClassification,
     TrainingArguments,
     Trainer,
     DataCollatorWithPadding
@@ -29,18 +28,18 @@ def set_trainer(config, model, tokenizer, train_dataset, valid_dataset):
         fp16= True,
         fp16_opt_level= '02',
         gradient_accumulation_steps = 4,
-        gradient_checkpointing= True,
-        optim = 'adafactor'
+        gradient_checkpointing= False,
+        optim = 'adamw_torch'
     )
 
 
-    accuracy = evaluate.load("accuracy")
+    bleu = evaluate.load("bleu")
     def compute_metrics(eval_pred):
 
         predictions, labels = eval_pred
         predictions = np.argmax(predictions, axis=1)
 
-        return accuracy.compute(predictions=predictions, references=labels)
+        return bleu.compute(predictions=predictions, references=labels)
 
 
     trainer = Trainer(

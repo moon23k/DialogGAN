@@ -12,13 +12,12 @@ class Config(object):
     def __init__(self, strategy):
 
         self.strategy = strategy        
-        self.mname = 'bert-base-uncased'
+        self.mname = 'google-t5/t5-small'
         
         self.lr = 1e-5
         self.n_epochs = 5
         self.batch_size = 32
         self.max_len = 512
-        self.num_labels = 4
 
         self.ckpt = f"ckpt/{strategy}"
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -37,16 +36,11 @@ def main(strategy):
     set_seed(42)
     config = Config(strategy)
 
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = T5TokenizerFast.from_pretrained(
         config.mname, model_max_length=config.max_len
     )
-    
-    model = AutoModelForSequenceClassification.from_pretrained(
-        config.mname, num_labels=config.num_labels
-    ).to(config.device)
-
-    if config.strategy in ['grad_checkpointing', 'all']:
-        model.config.use_cache = False
+    model = T5ForConditionalGeneration.from_pretrained(config.mname)
+    model.to(config.device)
 
 
     #Load datasets
