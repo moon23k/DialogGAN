@@ -11,8 +11,7 @@ from transformers import (
 
 def set_trainer(config, model, tokenizer, train_dataset, valid_dataset):
 
-    training_args = TrainingArguments(
-
+    training_args = Seq2SeqTrainingArguments(
         output_dir= config.ckpt,
         num_train_epochs= config.n_epochs,
         learning_rate= config.lr,
@@ -24,12 +23,13 @@ def set_trainer(config, model, tokenizer, train_dataset, valid_dataset):
         save_strategy= 'epoch',
         logging_strategy= 'epoch',
         evaluation_strategy= 'epoch',
+        predict_with_generate=True,
 
         fp16= True,
         fp16_opt_level= '02',
         gradient_accumulation_steps = 4,
         gradient_checkpointing= False,
-        optim = 'adamw_torch'
+        optim = 'adamw_torch'    
     )
 
 
