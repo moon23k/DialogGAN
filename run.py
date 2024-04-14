@@ -1,26 +1,75 @@
 import json, argparse, torch
-from utils import set_trainer, load_dataset
-from transformers import (
-    set_seed, 
-    T5TokenizerFast, 
-    T5ForConditionalGeneration
+from module import load_dataloader, load_model, Trainer
+from peft import TaskType, LoraConfig
+from transformers import set_seed, AutoTokenizer, BitsAndBytesConfig
+
+from module import (
+    load_model, 
+    load_dataloader,
+    Trainer,
+    Tester
 )
 
 
 
+
 class Config(object):
-    def __init__(self, strategy):
+    def __init__(self, args):
 
-        self.strategy = strategy        
-        self.mname = 'google-t5/t5-small'
+        #Common attributes
+        self.mode = args.mode
+        self.strategy = args.strategy        
+        self.mname = 'google/flan-t5-base'
         
-        self.lr = 1e-5
-        self.n_epochs = 5
-        self.batch_size = 32
         self.max_len = 512
+        self.batch_size = 32
 
-        self.ckpt = f"ckpt/{strategy}"
+        self.ckpt = f"ckpt/{self.strategy}"
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        #Args for Tokenizer
+        self.tok_args = {
+            'pretrained_model_name_or_path': self.mname,
+            'device_map': self.device,
+            'load_in_8bit': True,
+            'model_max_length': self.max_len
+        }
+
+        #Args for Model
+        self.model_args = {
+            'pretrained_model_name_or_path': self.mname,
+            'device_map': self.device,
+            'torch_dtype': torch.bfloat16,
+            'trust_remote_code': True,
+            'quantization_config': BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16
+            )
+        }
+        
+        #Args for PEFT
+        self.peft_config = LoraConfig(
+            r=16, #8~32
+            lora_alpha=32,
+            target_modules=["q", "v"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type=TaskType.SEQ_2_SEQ_LM
+        )        
+
+        #Args for Training
+        self.training_args = {
+            'lr': 1e-5,
+            'n_epochs': 10,
+            'clip': 1,
+            'ckpt': self.ckpt,  
+            'iters_to_generate': 10,
+            'iters_to_accumulate': 4,
+            'early_stop': True,
+            'patience': 3
+        }
 
 
     def print_attr(self):
@@ -30,49 +79,35 @@ class Config(object):
 
 
 
-def main(strategy):
-
+def main(args):
     #Prerequisites
     set_seed(42)
-    config = Config(strategy)
+    config = Config(args)
+    tokenizer = AutoTokenizer.from_pretrained(**config.tok_args)
+    model = load_model(config)
 
-    tokenizer = T5TokenizerFast.from_pretrained(
-        config.mname, model_max_length=config.max_len
-    )
-    model = T5ForConditionalGeneration.from_pretrained(config.mname)
-    model.to(config.device)
+    if config.mode == 'finetune':
+        train_dataset = load_dataloader(tokenizer, 'train')
+        valid_dataset = load_dataloader(tokenizer, 'valid')
 
+        trainer = Trainer(config, model, tokenizer, train_dataset, valid_dataset)    
+        trainer.train()
 
-    #Load datasets
-    train_dataset = load_dataset(tokenizer, 'train')
-    valid_dataset = load_dataset(tokenizer, 'valid')
-    test_dataset = load_dataset(tokenizer, 'test')
-
-    #Load Trainer
-    trainer = set_trainer(config, model, tokenizer, train_dataset, valid_dataset)    
-    
-    #Training
-    torch.cuda.reset_max_memory_allocated()
-    train_output = trainer.train()
-    gpu_memory = torch.cuda.max_memory_allocated()
-    
-    #Evaluating
-    eval_output = trainer.evaluate(test_dataset)
-    
-    #Save Training and Evaluation Rst Report
-    report = {**train_output.metrics, **eval_output}
-    report['gpu_memory'] = f"{gpu_memory / (1024 ** 3):.2f} GB"
-    with open(f"report/{strategy}.json", 'w') as f:
-        json.dump(report, f)
+    elif config.mode == 'test':
+        test_dataloader = load_dataloader(tokenizer, 'test')
+        tester = Tester(config, model, tokenizer, test_dataloader)
+    elif config.mode == 'inference':
+        pass
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-mode', required=True)
     parser.add_argument('-strategy', required=True)
 
     args = parser.parse_args()
-    assert args.strategy.lower() in ['std', 'eat', 'peft']
+    assert args.mode.lower() in ['finetune', 'test', 'inference']
+    assert args.strategy.lower() in ['std', 'gen']
 
-
-    main(args.strategy)
+    main(args)

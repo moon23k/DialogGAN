@@ -1,104 +1,40 @@
 import torch
-from transformers import AutoModelForSequenceClassification
-from peft import (
-    TaskType,
-    get_peft_model,
-    PromptTuningInit,    
+from transformers import AutoModelForSeq2SeqLM
+from peft import prepare_model_for_kbit_training, get_peft_model
+
+
+
+
+def print_model_desc(model):
+    #Number of trainerable parameters
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"--- Model Params: {n_params:,}")
+
+    #Model size check
+    param_size, buffer_size = 0, 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
     
-    PromptTuningConfig,
-    PrefixTuningConfig,
-    PromptEncoderConfig,  #for P-Tuning
-    
-    LoraConfig,
-    IA3Config
-)
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
 
-
-
-
-def set_peft_config(config):
-    peft = config.peft
-    task_type = TaskType.SEQ_CLS
-    num_virtual_tokens = config.num_virtual_tokens
-    encoder_hidden_size = config.encoder_hidden_size
-    
-
-    if peft == 'prompt_tuning':
-        peft_config = PromptTuningConfig(
-            task_type=task_type,
-            inference_mode = False,
-            num_virtual_tokens=num_virtual_tokens,
-            prompt_tuning_init=PromptTuningInit.RANDOM,
-            tokenizer_name_or_path=config.mname
-        )
-
-    elif peft == 'prefix_tuning':
-        peft_config = PrefixTuningConfig(
-            task_type=task_type,
-            inference_mode=False,
-            num_virtual_tokens=num_virtual_tokens
-        )
-
-
-    elif peft == 'p_tuning':
-        peft_config = PromptEncoderConfig(
-            task_type=task_type,
-            inference_mode = False,
-            num_virtual_tokens=num_virtual_tokens,
-            encoder_hidden_size=encoder_hidden_size
-        )
-
-    elif peft == 'lora':
-        peft_config = LoraConfig(
-            task_type=task_type,
-            inference_mode = False,
-            r=16,
-            lora_alpha=16,
-            target_modules=["query", "value"],
-            lora_dropout=0.1,
-            bias="none",
-            modules_to_save=["classifier"],
-        )
-
-    elif peft == 'ia3':
-        peft_config = IA3Config(
-            task_type=task_type,
-            inference_mode = True,
-            target_modules=["query", "value", "classifier"],
-            feedforward_modules=["classifier"]
-        )
-
-    return peft_config
-
-
-
-def set_param_dict(model):
-    param_dict = {}
-    all_params = 0
-    trainable_params = 0
-    
-    for _, param in model.named_parameters():
-        all_params += param.numel()
-        if param.requires_grad:
-            trainable_params += param.numel()
-    
-    param_dict['all_params'] = all_params
-    param_dict['trainable_params'] = trainable_params
-    param_dict['trainable_perc'] = f"{(100 * trainable_params / all_params):.5f}%"
-
-    return param_dict
+    size_all_mb = (param_size + buffer_size) / 1024**2
+    print(f"--- Model  Size : {size_all_mb:.3f} MB\n")
 
 
 
 def load_model(config):
-    model = AutoModelForSequenceClassification.from_pretrained(config.mname, num_labels=config.num_labels)
 
-    if config.peft == 'vanilla':
-        return model.to(config.device), set_param_dict(model)
+    model = AutoModelForSeq2SeqLM.from_pretrained(**config.model_args)
+    model = prepare_model_for_kbit_training(model)
+    model = get_peft_model(model, config.peft_config)
+    model.config.use_cache = False
 
-    peft_config = set_peft_config(config)
+    #load finetuned states
+    if config.mode != 'finetune':
+        pass
 
-    model = get_peft_model(model, peft_config)
-    model.config.use_cache = False     #For Gradient Checkpointing
+    setattr(config, 'pad_token_id', model.config.pad_token_id)
+    setattr(config, 'decoder_start_token_id', model.config.decoder_start_token_id)
 
-    return model.to(config.device), set_param_dict(model)
+    return model    
