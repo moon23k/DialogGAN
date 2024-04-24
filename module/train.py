@@ -1,4 +1,5 @@
 import json, torch
+from tqdm import tqdm
 import torch.nn as nn
 import torch.amp as amp
 import bitsandbytes as bnb
@@ -54,7 +55,7 @@ class Trainer:
         prev_loss, best_loss = float('inf'), float('inf')
 
         torch.cuda.empty_cache()
-        for epoch in range(1, self.n_epochs + 1):
+        for epoch in tqdm(range(1, self.n_epochs + 1)):
 
             start_time, end_time = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             start_time.record()
@@ -110,12 +111,6 @@ class Trainer:
             json.dump(records, fp)
 
 
-    def generative_forward(self, batch):
-        batch = {k: v.to(self.device) for k, v in batch.items()}
-        preds = self.model.generate()
-        return
-
-
     def train_epoch(self):
         self.model.train()
         tot_len = len(self.train_dataloader)
@@ -124,14 +119,8 @@ class Trainer:
 
         for idx, batch in enumerate(self.train_dataloader):
             idx += 1
-            is_generative = False
-            if self.strategy == 'generative' and not (idx % self.iters_to_generate):
-                is_generative = True
-            
             batch = {k: v.to(self.device) for k, v in batch.items()}
-            batch['is_generative'] = is_generative
-
-            loss = self.model(**batch).loss      
+            loss = self.model(**batch).loss
             loss = loss / self.iters_to_accumulate
             loss.backward()
             

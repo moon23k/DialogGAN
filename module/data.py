@@ -21,7 +21,7 @@ class CustomDataset(torch.utils.data.Dataset):
         inputs = self.tokenizer.encode_plus(self.data[idx]['x'], return_tensors='pt')        
         labels = self.tokenizer.encode(self.data[idx]['y'], return_tensors='pt')
 
-        return inputs['input_ids'], inputs['attention_mask'], labels
+        return map(lambda x: x.squeeze(), (inputs['input_ids'], inputs['attention_mask'], labels))
 
     def __len__(self):
         return len(self.data)
@@ -36,7 +36,8 @@ class Collator(object):
 
 
     def __call__(self, batch):
-        input_batch, mask_batch, label_batch = zip(*batch)     
+
+        input_batch, mask_batch, label_batch = zip(*batch)
 
         input_ids = self.pad_batch(input_batch)
         attention_mask = self.pad_batch(mask_batch)
@@ -44,7 +45,7 @@ class Collator(object):
         labels = self.pad_batch(label_batch)
         labels.masked_fill_(labels == self.pad_token_id, -100)
         decoder_input_ids = self.shift_right(labels)
-        
+
         return {'input_ids': input_ids,
                 'attention_mask': attention_mask,
                 'labels': labels,

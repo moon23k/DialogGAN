@@ -96,6 +96,7 @@ def main(args):
     elif config.mode == 'test':
         test_dataloader = load_dataloader(tokenizer, 'test')
         tester = Tester(config, model, tokenizer, test_dataloader)
+        tester.test()
     elif config.mode == 'inference':
         pass
 
